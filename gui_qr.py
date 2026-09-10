@@ -16,10 +16,26 @@ from PIL import Image
 import os
 from pathlib import Path
 
+# ---- Importing datime for SQLite
+from datetime import *
 
 # ---- Global variable to store current QR image (PIL.Image.Image) ----
 current_qr_image = None
+last_qr_id = None
+# --- Importing sqlite3
+import sqlite3
+conn = sqlite3.connect("QR-code-history.db")
+cursor = conn.cursor()
 
+cursor.execute("""
+    CREATE TABLE IF NOT EXISTS historie (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        url TEXT NOT NULL,
+        name_file TEXT NOT NULL,
+        date TEXT NOT NULL,
+        download INTEGER NOT NULL DEFAULT 0
+    )               
+""")
 
 # ---- GUI Setup ----
 root = Tk()
@@ -55,7 +71,7 @@ def del_QR():
 
 # ---- def of Generate Button ----
 def press_Button():
-    global Label_QR, current_qr_image
+    global Label_QR, current_qr_image, last_qr_id
 
     raw = Entry_URL.get().strip()
     URL_text = raw
@@ -138,8 +154,6 @@ def press_Button():
 
     # ---- from PilImage to -> PIL.Image.Image ----
     qr_pil_image = qr.get_image()
-
-    # Ulož do glob proměnné½½
     current_qr_image = qr_pil_image
 
     # ---- creating the CTkImage frop qr ----
@@ -149,22 +163,30 @@ def press_Button():
         size=(120, 120)
     )
 
-    # Novy Label_QR se vytvoří až po vygenerovaní½½ QR
     Label_QR = ctk.CTkLabel(
         root,
         text="",
         image=qr_image
     )
 
-    # Drží obrá½½zek v paměti, aby nezmizel
     Label_QR.image = qr_image
     Label_QR.place(x=140, y=220)
+    
+    # ---- taking it to SQLite database
+    now = datetime.now()
+    year = now.year
+    month = now.month
+    day = now.day
+    date_together = f"{year}-{month}-{day}"
+    cursor.execute("INSERT INTO historie (url, name_file, date, download) VALUES (?, ?, ?, ?)", (Entry_URL.get(), Entry_QR_Name.get(), date_together, 0))
+    conn.commit()
+    last_qr_id = cursor.lastrowid
 
 
 # --- def to download the image
 def download_Button():
-    global current_qr_image
-
+    global current_qr_image, last_qr_id
+    
     if current_qr_image is None:
         Label_Error.configure(
             text="You need generate your QR code first.",
@@ -188,6 +210,8 @@ def download_Button():
             Label_Error.place(x=85, y=180)
         
     current_qr_image.save(path)
+    cursor.execute("UPDATE historie SET download = ? WHERE ID = ?", (1, last_qr_id))
+    conn.commit()
    
 # ---- Main Label of program ----
 Label_Main = ctk.CTkLabel(
